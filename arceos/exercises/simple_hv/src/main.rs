@@ -87,7 +87,7 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     }
 
     // Debug: dump VM exit state.
-    let sepc_csr = riscv::register::sepc::read().bits();
+    let sepc_csr = riscv::register::sepc::read();
     let hstatus_csr = CSR.hstatus.get_value();
     ax_println!(
         "[hv] exit scause={:#x} stval={:#x} ctx.sepc={:#x} csr.sepc={:#x} hstatus={:#x} a={:x?} ra={:#x} sp={:#x} t1={:#x}",
