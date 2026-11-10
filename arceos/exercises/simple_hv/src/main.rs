@@ -105,6 +105,11 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     }
     ax_println!("[hv] entering guest with sepc={:#x}", ctx.guest_regs.sepc);
 
+    // Disable interrupts while handling the VM exit: a timer interrupt
+    // between `_run_guest` returning and `vmexit_handler` reading `scause`
+    // would overwrite the `scause` register and corrupt the exit reason.
+    riscv::interrupt::disable();
+
     unsafe {
         _run_guest(ctx);
     }
