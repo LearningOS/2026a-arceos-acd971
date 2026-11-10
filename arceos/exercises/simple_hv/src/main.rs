@@ -26,7 +26,7 @@ use sbi::SbiMessage;
 use loader::load_vm_image;
 use axhal::mem::PhysAddr;
 use axmm::AddrSpace;
-use crate::regs::GprIndex::{A0, A1};
+use crate::regs::GprIndex::{self, A0, A1};
 
 const VM_ENTRY: usize = 0x8020_0000;
 
@@ -85,6 +85,22 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     unsafe {
         _run_guest(ctx);
     }
+
+    // Debug: dump VM exit state.
+    let sepc_csr = riscv::register::sepc::read().bits();
+    let hstatus_csr = CSR.hstatus.get_value();
+    ax_println!(
+        "[hv] exit scause={:#x} stval={:#x} ctx.sepc={:#x} csr.sepc={:#x} hstatus={:#x} a={:x?} ra={:#x} sp={:#x} t1={:#x}",
+        scause::read().bits(),
+        stval::read(),
+        ctx.guest_regs.sepc,
+        sepc_csr,
+        hstatus_csr,
+        ctx.guest_regs.gprs.a_regs(),
+        ctx.guest_regs.gprs.reg(GprIndex::RA),
+        ctx.guest_regs.gprs.reg(GprIndex::SP),
+        ctx.guest_regs.gprs.reg(GprIndex::T1),
+    );
 
     vmexit_handler(ctx, uspace)
 }
