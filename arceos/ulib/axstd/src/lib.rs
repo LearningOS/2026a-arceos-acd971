@@ -166,17 +166,17 @@ pub mod collections {
         }
 
         /// An iterator visiting all key-value pairs in arbitrary order.
-        pub fn iter(&self) -> hashbrown::hash_map::Iter<'_, K, V, HashBuilder> {
+        pub fn iter(&self) -> hashbrown::hash_map::Iter<'_, K, V> {
             self.0.iter()
         }
 
         /// An iterator visiting all keys in arbitrary order.
-        pub fn keys(&self) -> hashbrown::hash_map::Keys<'_, K, V, HashBuilder> {
+        pub fn keys(&self) -> hashbrown::hash_map::Keys<'_, K, V> {
             self.0.keys()
         }
 
         /// An iterator visiting all values in arbitrary order.
-        pub fn values(&self) -> hashbrown::hash_map::Values<'_, K, V, HashBuilder> {
+        pub fn values(&self) -> hashbrown::hash_map::Values<'_, K, V> {
             self.0.values()
         }
     }
@@ -244,7 +244,7 @@ pub mod collections {
         }
 
         /// An iterator visiting all elements in arbitrary order.
-        pub fn iter(&self) -> hashbrown::hash_set::Iter<'_, T, HashBuilder> {
+        pub fn iter(&self) -> hashbrown::hash_set::Iter<'_, T> {
             self.0.iter()
         }
     }
