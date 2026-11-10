@@ -3,6 +3,8 @@
 use core::ffi::{c_void, c_char, c_int};
 use axhal::arch::TrapFrame;
 use axhal::trap::{register_trap_handler, SYSCALL};
+use axhal::mem::VirtAddr;
+use memory_addr::VirtAddrRange;
 use axerrno::LinuxError;
 use axtask::current;
 use axtask::TaskExtRef;
@@ -131,7 +133,6 @@ fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
     ret
 }
 
-#[allow(unused_variables)]
 fn sys_mmap(
     addr: *mut usize,
     length: usize,
@@ -140,7 +141,61 @@ fn sys_mmap(
     fd: i32,
     _offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    syscall_body!(sys_mmap, {
+        if length == 0 {
+            return Err(LinuxError::EINVAL);
+        }
+        let flags = MmapFlags::from_bits_truncate(flags);
+        let prot_flags = MappingFlags::from(MmapProt::from_bits_truncate(prot));
+
+        // If mapping a file, read the file content through the fd first.
+        let mut file_data = alloc::vec::Vec::new();
+        if fd >= 0 && !flags.contains(MmapFlags::MAP_ANONYMOUS) {
+            let file_like = api::get_file_like(fd)?;
+            let st_size = file_like.stat()?.st_size;
+            if st_size > 0 {
+                file_data = alloc::vec![0u8; st_size as usize];
+                let mut read_total = 0;
+                while read_total < file_data.len() {
+                    let n = file_like.read(&mut file_data[read_total..])?;
+                    if n == 0 {
+                        break;
+                    }
+                    read_total += n;
+                }
+                file_data.resize(read_total, 0);
+            }
+        }
+
+        let map_len = (length + 0xfff) & !0xfff;
+
+        let curr = current();
+        let mut aspace = curr.task_ext().aspace.lock();
+
+        if addr as usize != 0 {
+            // Map at the given fixed address.
+            let vaddr = VirtAddr::from(addr as usize);
+            if !vaddr.is_aligned_4k() || !aspace.contains_range(vaddr, map_len) {
+                return Err(LinuxError::EINVAL);
+            }
+            aspace.map_alloc(vaddr, map_len, prot_flags, true)?;
+            if !file_data.is_empty() {
+                aspace.write(vaddr, &file_data)?;
+            }
+            Ok(vaddr.as_usize())
+        } else {
+            // Choose a free area in the address space.
+            let limit = VirtAddrRange::new(aspace.base(), aspace.end());
+            let vaddr = aspace
+                .find_free_area(aspace.base(), map_len, limit)
+                .ok_or(LinuxError::ENOMEM)?;
+            aspace.map_alloc(vaddr, map_len, prot_flags, true)?;
+            if !file_data.is_empty() {
+                aspace.write(vaddr, &file_data)?;
+            }
+            Ok(vaddr.as_usize())
+        }
+    })
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {

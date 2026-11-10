@@ -50,7 +50,7 @@ fn main() {
     prepare_vm_pgtable(ept_root);
 
     // Kick off vm and wait for it to exit.
-    while !run_guest(&mut ctx) {
+    while !run_guest(&mut ctx, &uspace) {
     }
 
     panic!("Hypervisor ok!");
@@ -67,17 +67,18 @@ fn prepare_vm_pgtable(ept_root: PhysAddr) {
     }
 }
 
-fn run_guest(ctx: &mut VmCpuRegisters) -> bool {
+fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     unsafe {
         _run_guest(ctx);
     }
 
-    vmexit_handler(ctx)
+    vmexit_handler(ctx, uspace)
 }
 
 #[allow(unreachable_code)]
-fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
+fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     use scause::{Exception, Trap};
+    use crate::regs::GprIndex;
 
     let scause = scause::read();
     match scause.cause() {
@@ -95,10 +96,45 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
                         ax_println!("Shutdown vm normally!");
                         return true;
                     },
-                    _ => todo!(),
+                    _ => {
+                        // Unsupported SBI call: report the error in a0 and
+                        // resume the guest.
+                        ax_println!("Unsupported SBI call, ignore it");
+                        ctx.guest_regs.gprs.a_regs_mut()[0] = usize::MAX; // SBI_ERR_FAILED
+                    }
                 }
             } else {
                 panic!("bad sbi message! ");
+            }
+        },
+        Trap::Exception(Exception::VirtualInstruction) => {
+            // The guest runs in VS-mode and attempts to access M-mode CSRs,
+            // which raises a virtual instruction exception. Emulate the
+            // trapped instruction here.
+            let sepc = ctx.guest_regs.sepc;
+            let mut inst_buf = [0u8; 4];
+            uspace
+                .read(axhal::mem::VirtAddr::from(sepc), &mut inst_buf)
+                .unwrap_or_else(|e| panic!("Cannot read guest instruction at {:#x}: {:?}", sepc, e));
+            let inst = u32::from_le_bytes(inst_buf);
+            let opcode = inst & 0x7f;
+            let funct3 = (inst >> 12) & 0x7;
+            if opcode != 0x73 || funct3 != 0b010 {
+                panic!(
+                    "Cannot emulate virtual instruction {:#x} at sepc {:#x}",
+                    inst, sepc
+                );
+            }
+            let csr_num = inst >> 20;
+            let rd = ((inst >> 7) & 0x1f) as u32;
+            const CSR_MHARTID: u32 = 0xf14;
+            if csr_num == CSR_MHARTID {
+                // The hypervisor virtualizes the guest hart id as 0x1234.
+                let gpr_index = GprIndex::from_raw(rd).unwrap_or(GprIndex::Zero);
+                ctx.guest_regs.gprs.set_reg(gpr_index, 0x1234);
+                ctx.guest_regs.sepc = sepc + 4;
+            } else {
+                panic!("Cannot emulate csr access {:#x} at sepc {:#x}", csr_num, sepc);
             }
         },
         Trap::Exception(Exception::IllegalInstruction) => {

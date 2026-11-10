@@ -306,5 +306,39 @@ pub(crate) fn rename(old: &str, new: &str) -> AxResult {
         warn!("dst file already exist, now remove it");
         remove_file(None, new)?;
     }
-    parent_node_of(None, old).rename(old, new)
+    match parent_node_of(None, old).rename(old, new) {
+        Err(AxError::Unsupported) => rename_by_copy(old, new),
+        res => res,
+    }
+}
+
+/// Fallback implementation of rename by copy-and-remove, for filesystems
+/// (e.g. ramfs) whose nodes do not support the `rename` operation natively.
+fn rename_by_copy(old: &str, new: &str) -> AxResult {
+    let node = lookup(None, old)?;
+    let attr = node.get_attr()?;
+    if attr.is_dir() {
+        ax_err!(Unsupported, "renaming a directory is not supported");
+    }
+    let size = attr.size() as usize;
+    let mut buf = Vec::with_capacity(size);
+    buf.resize(size, 0);
+    let mut read_len = 0;
+    while read_len < size {
+        let n = node.read_at(read_len as u64, &mut buf[read_len..])?;
+        if n == 0 {
+            break;
+        }
+        read_len += n;
+    }
+    buf.resize(read_len, 0);
+
+    create_file(None, new)?;
+    let new_node = lookup(None, new)?;
+    let mut written = 0;
+    while written < read_len {
+        written += new_node.write_at(written as u64, &buf[written..])?;
+    }
+    drop(node);
+    remove_file(None, old)
 }

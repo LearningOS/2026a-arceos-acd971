@@ -7,8 +7,9 @@ use crate::VM_ENTRY;
 
 pub fn load_vm_image(fname: &str, uspace: &mut AddrSpace) -> io::Result<()> {
     let mut buf = [0u8; 64];
-    load_file(fname, &mut buf)?;
+    let img_len = load_file(fname, &mut buf)?;
 
+    // Map the guest code page at VM_ENTRY.
     uspace.map_alloc(VM_ENTRY.into(), PAGE_SIZE_4K, MappingFlags::READ|MappingFlags::WRITE|MappingFlags::EXECUTE|MappingFlags::USER, true).unwrap();
 
     let (paddr, _, _) = uspace
@@ -22,9 +23,19 @@ pub fn load_vm_image(fname: &str, uspace: &mut AddrSpace) -> io::Result<()> {
         core::ptr::copy_nonoverlapping(
             buf.as_ptr(),
             phys_to_virt(paddr).as_mut_ptr(),
-            PAGE_SIZE_4K,
+            img_len,
         );
     }
+
+    // Map the page at guest physical address 0, and put the magic number
+    // 0x6688 at offset 0x40, which will be read by the guest with
+    // `ld a0, 64(zero)`.
+    uspace
+        .map_alloc(0usize.into(), PAGE_SIZE_4K, MappingFlags::READ | MappingFlags::WRITE | MappingFlags::USER, true)
+        .unwrap();
+    uspace
+        .write(axhal::mem::VirtAddr::from(0x40), &0x6688usize.to_le_bytes())
+        .unwrap();
 
     Ok(())
 }

@@ -55,7 +55,19 @@ extern crate alloc;
 
 #[cfg(feature = "alloc")]
 #[doc(no_inline)]
-pub use alloc::{boxed, collections, format, string, vec};
+pub use alloc::{boxed, format, string, vec};
+
+#[cfg(feature = "alloc")]
+pub mod collections {
+    //! Collection types, similar to [`std::collections`](https://doc.rust-lang.org/std/collections/).
+    //!
+    //! Map/Set types are provided by the [hashbrown] crate, and the others
+    //! are re-exported from the `alloc` crate.
+    //!
+    //! [hashbrown]: https://crates.io/crates/hashbrown
+    pub use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque};
+    pub use hashbrown::{HashMap, HashSet};
+}
 
 #[doc(no_inline)]
 pub use core::{arch, cell, cmp, hint, marker, mem, ops, ptr, slice, str};
