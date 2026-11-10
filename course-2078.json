@@ -2,7 +2,7 @@
   "schema": 1,
   "courseId": 2078,
   "repository": "LearningOS/2026a-arceos-acd971",
-  "commit": "c85a145abf4b04b9b5a3b3c583baae7af7a0027f",
+  "commit": "cdb68d5f63b0f9e7cda4dc91d8912a520347b63a",
   "score": 500,
   "totalScore": 600,
   "exercises": [
@@ -46,13 +46,13 @@
       "max": 100,
       "score": 0,
       "status": "fail",
-      "exitCode": 0
+      "exitCode": 2
     }
   ],
   "student": "acd971",
-  "runId": "42798937633",
+  "runId": "42800086177",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
