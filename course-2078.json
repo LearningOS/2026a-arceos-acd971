@@ -2,7 +2,7 @@
   "schema": 1,
   "courseId": 2078,
   "repository": "LearningOS/2026a-arceos-acd971",
-  "commit": "8873ee3bf3466b32d21ea4484443540926365fb6",
+  "commit": "ef1018b866509ed93c661e0b26039445cde4ab1a",
   "score": 500,
   "totalScore": 600,
   "exercises": [
@@ -45,14 +45,14 @@
       "name": "simple_hv",
       "max": 100,
       "score": 0,
-      "status": "fail",
-      "exitCode": 0
+      "status": "timeout",
+      "exitCode": 124
     }
   ],
   "student": "acd971",
-  "runId": "42800743501",
+  "runId": "42801426336",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
