@@ -81,7 +81,7 @@ fn prepare_vm_pgtable(ept_root: PhysAddr) {
     CSR.hedeleg.read_and_set_bits(HEDELEG_MASK);
     ax_println!(
         "[hv] hgatp={:#x} hedeleg={:#x} (requested {:#x})",
-        riscv::register::hgatp::read(),
+        riscv::register::hgatp::read().bits(),
         CSR.hedeleg.get_value(),
         HEDELEG_MASK
     );
