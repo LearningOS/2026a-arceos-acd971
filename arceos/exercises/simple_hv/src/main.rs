@@ -108,7 +108,12 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     // Disable interrupts while handling the VM exit: a timer interrupt
     // between `_run_guest` returning and `vmexit_handler` reading `scause`
     // would overwrite the `scause` register and corrupt the exit reason.
-    riscv::interrupt::disable();
+    // SAFETY: disabling interrupts here is required for correctness and is
+    // re-enabled when the hypervisor state (including `sstatus`) is restored
+    // on the next guest entry.
+    unsafe {
+        riscv::interrupt::disable();
+    }
 
     unsafe {
         _run_guest(ctx);
