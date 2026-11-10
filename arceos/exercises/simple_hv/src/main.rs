@@ -82,6 +82,23 @@ fn prepare_vm_pgtable(ept_root: PhysAddr) {
 }
 
 fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    static SEPC_FIX_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    // Defensive: the guest must never enter with sepc == 0, which would
+    // immediately raise an instruction guest page fault at address 0.
+    if ctx.guest_regs.sepc == 0 {
+        let n = SEPC_FIX_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n > 3 {
+            panic!("sepc keeps being reset to 0, giving up");
+        }
+        ax_println!(
+            "[hv] WARNING: guest sepc == 0 before entry, restoring to VM_ENTRY"
+        );
+        ctx.guest_regs.sepc = VM_ENTRY;
+    }
+    ax_println!("[hv] entering guest with sepc={:#x}", ctx.guest_regs.sepc);
+
     unsafe {
         _run_guest(ctx);
     }
