@@ -17,7 +17,7 @@ mod sbi;
 mod loader;
 
 use vcpu::VmCpuRegisters;
-use riscv::register::{scause, sstatus, stval};
+use riscv::register::sstatus;
 use csrs::defs::hstatus;
 use tock_registers::LocalRegisterCopy;
 use csrs::{RiscvCsrTrait, CSR};
@@ -105,27 +105,19 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
     }
     ax_println!("[hv] entering guest with sepc={:#x}", ctx.guest_regs.sepc);
 
-    // Disable interrupts while handling the VM exit: a timer interrupt
-    // between `_run_guest` returning and `vmexit_handler` reading `scause`
-    // would overwrite the `scause` register and corrupt the exit reason.
-    // SAFETY: disabling interrupts here is required for correctness and is
-    // re-enabled when the hypervisor state (including `sstatus`) is restored
-    // on the next guest entry.
-    unsafe {
-        riscv::interrupt::disable();
-    }
-
     unsafe {
         _run_guest(ctx);
     }
 
-    // Debug: dump VM exit state.
+    // Debug: dump VM exit state. `scause`/`stval` were saved into
+    // `trap_csrs` by `_guest_exit` immediately on the trap, so they cannot
+    // be clobbered by an interrupt delivered while we handle the exit.
     let sepc_csr = riscv::register::sepc::read();
     let hstatus_csr = CSR.hstatus.get_value();
     ax_println!(
         "[hv] exit scause={:#x} stval={:#x} ctx.sepc={:#x} csr.sepc={:#x} hstatus={:#x} a={:x?} ra={:#x} sp={:#x} t1={:#x}",
-        scause::read().bits(),
-        stval::read(),
+        ctx.trap_csrs.scause,
+        ctx.trap_csrs.stval,
         ctx.guest_regs.sepc,
         sepc_csr,
         hstatus_csr,
@@ -140,12 +132,23 @@ fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
 
 #[allow(unreachable_code)]
 fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
-    use scause::{Exception, Trap};
     use crate::regs::GprIndex;
 
-    let scause = scause::read();
-    match scause.cause() {
-        Trap::Exception(Exception::VirtualSupervisorEnvCall) => {
+    // The trap reason was saved by `_guest_exit` right on the trap, so it
+    // is authoritative even if interrupts fired afterwards.
+    let scause_bits = ctx.trap_csrs.scause;
+    let stval = ctx.trap_csrs.stval;
+    let is_interrupt = (scause_bits >> 63) & 1 == 1;
+    let code = scause_bits & !(1usize << 63);
+    if is_interrupt {
+        // Interrupts that arrive in the host while handling the exit are
+        // not guest exits; just report and let the caller re-enter.
+        ax_println!("[hv] ignoring interrupt scause code {:#x} during exit handling", code);
+        return false;
+    }
+    match code {
+        // Exception::VirtualSupervisorEnvCall == 10
+        10 => {
             let sbi_msg = SbiMessage::from_regs(ctx.guest_regs.gprs.a_regs()).ok();
             ax_println!("VmExit Reason: VSuperEcall: {:?}", sbi_msg);
             if let Some(msg) = sbi_msg {
@@ -170,7 +173,8 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
                 panic!("bad sbi message! ");
             }
         },
-        Trap::Exception(Exception::VirtualInstruction) => {
+        // Exception::VirtualInstruction == 22
+        22 => {
             // The guest runs in VS-mode and attempts to access M-mode CSRs,
             // which raises a virtual instruction exception. Emulate the
             // trapped instruction here.
@@ -200,12 +204,13 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
                 panic!("Cannot emulate csr access {:#x} at sepc {:#x}", csr_num, sepc);
             }
         },
-        Trap::Exception(Exception::IllegalInstruction) => {
+        // Exception::IllegalInstruction == 2
+        2 => {
             // An M-mode CSR access raises illegal instruction if the guest
             // runs in HS-mode (e.g. when the exception was not delegated).
             // Emulate the same `csrr` instructions here as we do for
             // virtual instructions.
-            let inst = stval::read();
+            let inst = stval;
             let sepc = ctx.guest_regs.sepc;
             let opcode = inst & 0x7f;
             let funct3 = (inst >> 12) & 0x7;
@@ -219,18 +224,16 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
                 panic!("Bad instruction: {:#x} sepc: {:#x}", inst, sepc);
             }
         },
-        Trap::Exception(Exception::LoadGuestPageFault) => {
-            panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",
-                stval::read(),
-                ctx.guest_regs.sepc
-            );
+        // Exception::LoadGuestPageFault == 21
+        21 => {
+            panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}", stval, ctx.guest_regs.sepc);
         },
         _ => {
             panic!(
-                "Unhandled trap: {:?}, sepc: {:#x}, stval: {:#x}",
-                scause.cause(),
+                "Unhandled trap: code {:#x}, sepc: {:#x}, stval: {:#x}",
+                code,
                 ctx.guest_regs.sepc,
-                stval::read()
+                stval
             );
         }
     }

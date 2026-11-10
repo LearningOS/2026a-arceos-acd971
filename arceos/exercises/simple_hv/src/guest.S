@@ -93,6 +93,14 @@ _guest_exit:
     /* Pull GuestInfo out of sscratch, swapping with guest's a0 */
     csrrw a0, sscratch, a0
 
+    /* Save trap state immediately, before anything can clobber scause:
+       an interrupt delivered while the host is handling this exit would
+       otherwise overwrite the scause/stval registers. */
+    csrr t1, scause
+    sd   t1, ({trap_scause})(a0)
+    csrr t1, stval
+    sd   t1, ({trap_stval})(a0)
+
     /* Save guest GPRs. */
     sd   ra, ({guest_ra})(a0)
     sd   gp, ({guest_gp})(a0)

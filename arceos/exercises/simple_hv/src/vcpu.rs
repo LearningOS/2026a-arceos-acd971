@@ -106,11 +106,16 @@ macro_rules! hyp_csr_offset {
     };
 }
 
-#[allow(unused_macros)]
-macro_rules! guest_csr_offset {
-    ($reg:tt) => {
-        offset_of!(VmCpuRegisters, guest_regs) + offset_of!(GuestCpuState, $reg)
-    };
+#[allow(dead_code)]
+const fn guest_csr_offset(field: usize) -> usize {
+    offset_of!(VmCpuRegisters, guest_regs) + field
+}
+
+/// Offsets of the saved trap state fields within `VmCpuRegisters`.
+/// `VmCpuTrapState` is `{ scause, stval, htval, htinst }`, each `usize`.
+#[allow(dead_code)]
+const fn trap_state_offset(field: usize) -> usize {
+    offset_of!(VmCpuRegisters, trap_csrs) + field
 }
 
 global_asm!(
@@ -174,10 +179,13 @@ global_asm!(
     guest_t6 = const guest_gpr_offset(GprIndex::T6),
     guest_sp = const guest_gpr_offset(GprIndex::SP),
 
-    guest_sstatus = const guest_csr_offset!(sstatus),
-    guest_hstatus = const guest_csr_offset!(hstatus),
-    guest_scounteren = const guest_csr_offset!(scounteren),
-    guest_sepc = const guest_csr_offset!(sepc),
+    guest_sstatus = const guest_csr_offset(offset_of!(GuestCpuState, sstatus)),
+    guest_hstatus = const guest_csr_offset(offset_of!(GuestCpuState, hstatus)),
+    guest_scounteren = const guest_csr_offset(offset_of!(GuestCpuState, scounteren)),
+    guest_sepc = const guest_csr_offset(offset_of!(GuestCpuState, sepc)),
+
+    trap_scause = const trap_state_offset(offset_of!(VmCpuTrapState, scause)),
+    trap_stval = const trap_state_offset(offset_of!(VmCpuTrapState, stval)),
 
 );
 
