@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2078,
   "repository": "LearningOS/2026a-arceos-acd971",
-  "commit": "5598d11a1ffcdb08385507c6a30fda97b65229f7",
-  "score": 200,
+  "commit": "e58dece531162285b1822d0e3033f919b75ffddd",
+  "score": 400,
   "totalScore": 600,
   "exercises": [
     {
@@ -16,9 +16,9 @@
     {
       "name": "ramfs_rename",
       "max": 100,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 2
+      "score": 100,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "alt_alloc",
@@ -30,9 +30,9 @@
     {
       "name": "support_hashmap",
       "max": 100,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 2
+      "score": 100,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "sys_map",
@@ -50,9 +50,9 @@
     }
   ],
   "student": "acd971",
-  "runId": "42796608921",
+  "runId": "42797190410",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
