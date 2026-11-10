@@ -25,6 +25,7 @@ use vcpu::_run_guest;
 use sbi::SbiMessage;
 use loader::load_vm_image;
 use axhal::mem::PhysAddr;
+use axmm::AddrSpace;
 use crate::regs::GprIndex::{A0, A1};
 
 const VM_ENTRY: usize = 0x8020_0000;
