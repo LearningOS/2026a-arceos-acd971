@@ -66,6 +66,19 @@ fn prepare_vm_pgtable(ept_root: PhysAddr) {
         );
         core::arch::riscv64::hfence_gvma_all();
     }
+    // Delegate traps that occur in VS-mode to HS-mode so that the
+    // hypervisor can handle them in `vmexit_handler`: illegal
+    // instruction, breakpoint, environment call from VS, guest page
+    // faults, and virtual instruction.
+    const HEDELEG_MASK: usize = (1 << 2)
+        | (1 << 3)
+        | (1 << 8)
+        | (1 << 10)
+        | (1 << 20)
+        | (1 << 21)
+        | (1 << 22)
+        | (1 << 23);
+    CSR.hedeleg.read_and_set_bits(HEDELEG_MASK);
 }
 
 fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
@@ -139,10 +152,23 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
             }
         },
         Trap::Exception(Exception::IllegalInstruction) => {
-            panic!("Bad instruction: {:#x} sepc: {:#x}",
-                stval::read(),
-                ctx.guest_regs.sepc
-            );
+            // An M-mode CSR access raises illegal instruction if the guest
+            // runs in HS-mode (e.g. when the exception was not delegated).
+            // Emulate the same `csrr` instructions here as we do for
+            // virtual instructions.
+            let inst = stval::read();
+            let sepc = ctx.guest_regs.sepc;
+            let opcode = inst & 0x7f;
+            let funct3 = (inst >> 12) & 0x7;
+            let csr_num = inst >> 20;
+            if opcode == 0x73 && funct3 == 0b010 && csr_num == 0xf14 {
+                let rd = ((inst >> 7) & 0x1f) as u32;
+                let gpr_index = GprIndex::from_raw(rd).unwrap_or(GprIndex::Zero);
+                ctx.guest_regs.gprs.set_reg(gpr_index, 0x1234);
+                ctx.guest_regs.sepc = sepc + 4;
+            } else {
+                panic!("Bad instruction: {:#x} sepc: {:#x}", inst, sepc);
+            }
         },
         Trap::Exception(Exception::LoadGuestPageFault) => {
             panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",

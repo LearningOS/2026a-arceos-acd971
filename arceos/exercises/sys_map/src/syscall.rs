@@ -175,7 +175,7 @@ fn sys_mmap(
         if addr as usize != 0 {
             // Map at the given fixed address.
             let vaddr = VirtAddr::from(addr as usize);
-            if !vaddr.is_aligned(0x1000) || !aspace.contains_range(vaddr, map_len) {
+            if vaddr.as_usize() & 0xfff != 0 || !aspace.contains_range(vaddr, map_len) {
                 return Err(LinuxError::EINVAL);
             }
             aspace.map_alloc(vaddr, map_len, prot_flags, true)?;
