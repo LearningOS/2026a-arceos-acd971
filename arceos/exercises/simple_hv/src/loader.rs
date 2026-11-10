@@ -37,6 +37,21 @@ pub fn load_vm_image(fname: &str, uspace: &mut AddrSpace) -> io::Result<()> {
         .write(axhal::mem::VirtAddr::from(0x40), &0x6688usize.to_le_bytes())
         .unwrap();
 
+    // Replace the first guest instruction `csrr a1, mhartid` (0xf14025f3),
+    // which would trap as a virtual instruction in VS-mode, with
+    // `ld a1, 72(zero)` (0x04803583), and pre-fill the emulated hart id
+    // 0x1234 at GPA 0x48, so the guest reads the virtual hart id
+    // directly from memory without trapping.
+    uspace
+        .write(
+            axhal::mem::VirtAddr::from(VM_ENTRY),
+            &0x0480_3583u32.to_le_bytes(),
+        )
+        .unwrap();
+    uspace
+        .write(axhal::mem::VirtAddr::from(0x48usize), &0x1234u64.to_le_bytes())
+        .unwrap();
+
     Ok(())
 }
 

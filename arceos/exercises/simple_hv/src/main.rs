@@ -79,6 +79,12 @@ fn prepare_vm_pgtable(ept_root: PhysAddr) {
         | (1 << 22)
         | (1 << 23);
     CSR.hedeleg.read_and_set_bits(HEDELEG_MASK);
+    ax_println!(
+        "[hv] hgatp={:#x} hedeleg={:#x} (requested {:#x})",
+        CSR.hgatp.get_value(),
+        CSR.hedeleg.get_value(),
+        HEDELEG_MASK
+    );
 }
 
 fn run_guest(ctx: &mut VmCpuRegisters, uspace: &AddrSpace) -> bool {
