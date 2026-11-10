@@ -66,7 +66,194 @@ pub mod collections {
     //!
     //! [hashbrown]: https://crates.io/crates/hashbrown
     pub use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque};
-    pub use hashbrown::{HashMap, HashSet};
+
+    use core::borrow::Borrow;
+    use core::hash::{BuildHasherDefault, Hash, Hasher};
+
+    /// A deterministic FNV-1a hasher, used as the default hasher of
+    /// [`HashMap`] and [`HashSet`] since `std::collections::RandomState`
+    /// is unavailable in `no_std` environments.
+    #[derive(Default, Clone)]
+    pub struct FnvHasher(u64);
+
+    impl Hasher for FnvHasher {
+        #[inline]
+        fn finish(&self) -> u64 {
+            self.0
+        }
+        #[inline]
+        fn write(&mut self, bytes: &[u8]) {
+            // FNV-1a 64-bit
+            for &byte in bytes {
+                self.0 ^= byte as u64;
+                self.0 = self.0.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+    }
+
+    pub type HashBuilder = BuildHasherDefault<FnvHasher>;
+
+    /// A hash map implemented with open addressing, backed by the
+    /// [hashbrown](https://crates.io/crates/hashbrown) crate.
+    pub struct HashMap<K, V>(hashbrown::HashMap<K, V, HashBuilder>);
+
+    impl<K, V> HashMap<K, V> {
+        /// Creates an empty `HashMap`.
+        pub fn new() -> Self {
+            Self(hashbrown::HashMap::with_hasher(HashBuilder::default()))
+        }
+
+        /// Creates an empty `HashMap` with at least the specified capacity.
+        pub fn with_capacity(capacity: usize) -> Self {
+            Self(hashbrown::HashMap::with_capacity_and_hasher(
+                capacity,
+                HashBuilder::default(),
+            ))
+        }
+    }
+
+    impl<K: Hash + Eq, V> HashMap<K, V> {
+        /// Inserts a key-value pair, returning the previous value of the key.
+        pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+            self.0.insert(k, v)
+        }
+
+        /// Returns the number of elements in the map.
+        pub fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        /// Returns `true` if the map contains no elements.
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+
+        /// Clears the map, removing all key-value pairs.
+        pub fn clear(&mut self) {
+            self.0.clear()
+        }
+
+        /// Returns a reference to the value corresponding to the key.
+        pub fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
+        where
+            K: Borrow<Q>,
+        {
+            self.0.get(k)
+        }
+
+        /// Returns a mutable reference to the value corresponding to the key.
+        pub fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+        where
+            K: Borrow<Q>,
+        {
+            self.0.get_mut(k)
+        }
+
+        /// Returns `true` if the map contains a value for the specified key.
+        pub fn contains_key<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> bool
+        where
+            K: Borrow<Q>,
+        {
+            self.0.contains_key(k)
+        }
+
+        /// Removes a key from the map, returning its value.
+        pub fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
+        where
+            K: Borrow<Q>,
+        {
+            self.0.remove(k)
+        }
+
+        /// An iterator visiting all key-value pairs in arbitrary order.
+        pub fn iter(&self) -> hashbrown::hash_map::Iter<'_, K, V, HashBuilder> {
+            self.0.iter()
+        }
+
+        /// An iterator visiting all keys in arbitrary order.
+        pub fn keys(&self) -> hashbrown::hash_map::Keys<'_, K, V, HashBuilder> {
+            self.0.keys()
+        }
+
+        /// An iterator visiting all values in arbitrary order.
+        pub fn values(&self) -> hashbrown::hash_map::Values<'_, K, V, HashBuilder> {
+            self.0.values()
+        }
+    }
+
+    impl<K, V> Default for HashMap<K, V> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// A hash set implemented with open addressing, backed by the
+    /// [hashbrown](https://crates.io/crates/hashbrown) crate.
+    pub struct HashSet<T>(hashbrown::HashSet<T, HashBuilder>);
+
+    impl<T> HashSet<T> {
+        /// Creates an empty `HashSet`.
+        pub fn new() -> Self {
+            Self(hashbrown::HashSet::with_hasher(HashBuilder::default()))
+        }
+
+        /// Creates an empty `HashSet` with at least the specified capacity.
+        pub fn with_capacity(capacity: usize) -> Self {
+            Self(hashbrown::HashSet::with_capacity_and_hasher(
+                capacity,
+                HashBuilder::default(),
+            ))
+        }
+    }
+
+    impl<T: Hash + Eq> HashSet<T> {
+        /// Adds a value to the set, returning `true` if it was not present.
+        pub fn insert(&mut self, value: T) -> bool {
+            self.0.insert(value)
+        }
+
+        /// Returns the number of elements in the set.
+        pub fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        /// Returns `true` if the set contains no elements.
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+
+        /// Clears the set, removing all values.
+        pub fn clear(&mut self) {
+            self.0.clear()
+        }
+
+        /// Returns `true` if the set contains the specified value.
+        pub fn contains<Q: Hash + Eq + ?Sized>(&self, value: &Q) -> bool
+        where
+            T: Borrow<Q>,
+        {
+            self.0.contains(value)
+        }
+
+        /// Removes a value from the set, returning whether it was present.
+        pub fn remove<Q: Hash + Eq + ?Sized>(&mut self, value: &Q) -> bool
+        where
+            T: Borrow<Q>,
+        {
+            self.0.remove(value)
+        }
+
+        /// An iterator visiting all elements in arbitrary order.
+        pub fn iter(&self) -> hashbrown::hash_set::Iter<'_, T, HashBuilder> {
+            self.0.iter()
+        }
+    }
+
+    impl<T> Default for HashSet<T> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 }
 
 #[doc(no_inline)]

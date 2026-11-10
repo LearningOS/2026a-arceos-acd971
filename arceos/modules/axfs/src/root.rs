@@ -318,7 +318,7 @@ fn rename_by_copy(old: &str, new: &str) -> AxResult {
     let node = lookup(None, old)?;
     let attr = node.get_attr()?;
     if attr.is_dir() {
-        ax_err!(Unsupported, "renaming a directory is not supported");
+        return ax_err!(Unsupported, "renaming a directory is not supported");
     }
     let size = attr.size() as usize;
     let mut buf = Vec::with_capacity(size);
